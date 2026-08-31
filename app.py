@@ -17,7 +17,7 @@ client = OpenAI(
     base_url="http://localhost:11434/v1",
     api_key="ollama",
 )
-OLLAMA_MODEL = "qwen2.5-coder:0.5b"
+OLLAMA_MODEL = "qwen2.5:1.5b"
 
 
 @app.route('/')
