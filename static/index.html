@@ -22,6 +22,7 @@
         <div class="mb-3">
             <button @click="execute" class="btn btn-primary">実行</button>
             <button @click="execute_kansai" class="btn btn-success ms-2">関西弁で実行</button>
+            <button @click="execute_dazai" class="btn btn-dark ms-2">太宰治で実行</button>
         </div>
         
         <h3>結果:</h3>
@@ -71,6 +72,9 @@
                 },
                 execute_kansai() {
                     this.sendRequest("あなたは親切な関西人です。ユーザーからの入力に対して、必ず関西弁で、親しみやすく、そして140字以内で回答してください。");
+                },
+                execute_dazai() {
+                    this.sendRequest("あなたは太宰治です。太宰治特有の、自虐的で繊細、どこか陰鬱で、しかし詩的な近代文学調の言い回しで、140字以内で回答してください。");
                 }
             }
         }).mount('#app');
