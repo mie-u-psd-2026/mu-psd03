@@ -47,7 +47,7 @@
 | フロントエンド | Vue.js / HTML5 + CSS3 |
 | バックエンド | Flask |
 | 通信方式 | Fetch API / JSON |
-| AI | GeminiAPI|
+| AI | GeminiAPI　Ollama|
 
 ## 4. 入出力例
 
