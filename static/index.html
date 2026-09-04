@@ -3,32 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sample Application</title>
+    <title>英語学習アプリ</title>
     <!-- Vue.jsをCDNから読み込み -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <!-- BootStrapをCDNから読み込み -->
-	<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
+    <style>
+        html, body { height: 100%; margin: 0; }
+        .app-root { display: flex; height: 100vh; }
+
+        /* 左サイドバー: 文章一覧 */
+        .sidebar {
+            width: 210px; flex-shrink: 0;
+            background: #d5e8d4; border-right: 2px solid #82b366;
+            padding: 10px; overflow-y: auto;
+        }
+        .doc-item {
+            padding: 8px 10px; margin-bottom: 6px; border-radius: 6px;
+            background: rgba(255,255,255,.6); cursor: pointer;
+            font-size: .85rem; display: flex; align-items: center; gap: 4px;
+        }
+        .doc-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .doc-delete {
+            border: none; background: none; color: #999; font-size: .8rem;
+            padding: 0 2px; cursor: pointer; flex-shrink: 0;
+        }
+        .doc-delete:hover { color: #c00; }
+        .doc-item:hover { background: rgba(255,255,255,.9); }
+        .doc-item.active { background: #fff; font-weight: bold; }
+
+        /* メイン領域 */
+        .main { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 12px; min-width: 0; }
+        .panels { flex: 1; display: flex; gap: 12px; min-height: 0; }
+        .panel {
+            flex: 1; border-radius: 4px; padding: 12px;
+            overflow-y: auto; min-width: 0;
+        }
+        .panel-en { background: #e1d5e7; border: 2px solid #9673a6; }
+        .panel-ja { background: #f8cecc; border: 2px solid #b85450; }
+        .panel-label { font-weight: bold; font-size: .9rem; margin-bottom: 8px; }
+        .panel pre { white-space: pre-wrap; font-family: inherit; font-size: .95rem; margin: 0; }
+
+        /* 下部: 単語ピック */
+        .word-area {
+            height: 34%; flex-shrink: 0; position: relative;
+            background: #dae8fc; border: 2px solid #6c8ebf; border-radius: 4px;
+            padding: 12px; overflow-y: auto;
+        }
+        .word-chips { display: flex; flex-wrap: wrap; gap: 8px; padding-right: 150px; }
+        .word-chip {
+            border: 1px solid #6c8ebf; border-radius: 16px; background: #fff;
+            padding: 4px 12px; font-size: .85rem; cursor: pointer;
+        }
+        .word-chip:hover { background: #f0f6ff; }
+        .word-buttons {
+            position: absolute; right: 16px; bottom: 16px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .action-btn {
+            background: #fff; border: 1px solid #333; border-radius: 10px;
+            padding: 10px 20px; font-size: .9rem;
+        }
+        .action-btn:hover:not(:disabled) { background: #f5f5f5; }
+
+        /* 入力ビュー */
+        .input-view { flex: 1; display: flex; flex-direction: column; gap: 10px; max-width: 720px; margin: 24px auto; width: 100%; }
+        .input-view textarea { flex: 1; resize: none; }
+
+        /* クイズ */
+        .quiz-box { text-align: center; padding: 8px; }
+        .quiz-word { font-size: 1.6rem; font-weight: bold; margin: 8px 0; }
+        .quiz-meaning { font-size: 1.1rem; margin: 8px 0; }
+    </style>
 </head>
 <body>
 
-    <div id="app" class="container">
-        <h2 class="mb-4">サンプルアプリ</h2>
+    <div id="app" class="app-root">
+        <!-- 左: 文章一覧 (ChatGPT風) -->
+        <aside class="sidebar">
+            <button class="btn btn-light w-100 mb-2 border" @click="newDocument">＋ 新しい文章</button>
+            <div v-for="doc in documents" :key="doc.id"
+                 class="doc-item" :class="{ active: current && current.id === doc.id }"
+                 @click="selectDocument(doc.id)">
+                <span class="doc-title">{{ doc.title }}</span>
+                <button class="doc-delete" title="削除" @click.stop="deleteDocument(doc.id)">✕</button>
+            </div>
+        </aside>
 
-        <div class="mb-3">
-            <label for="inputText" class="form-label">テキストを入力してください:</label>
-            <textarea id="inputText" class="form-control" rows="5" v-model="inputText" placeholder="ここにテキストを入力..."></textarea>
-        </div>
+        <main class="main">
+            <!-- 入力ビュー(文章未選択時) -->
+            <div v-if="!current" class="input-view">
+                <h5>英文を入力してください</h5>
+                <textarea v-model="inputText" class="form-control" placeholder="ここに英語の文章を貼り付け..."></textarea>
+                <div>
+                    <button class="btn btn-primary" @click="translate" :disabled="isTranslating">
+                        {{ isTranslating ? '翻訳中...' : '翻訳する' }}
+                    </button>
+                </div>
+                <div v-if="error" class="alert alert-danger mb-0">{{ error }}</div>
+            </div>
 
-        <div class="mb-3">
-            <button @click="execute" class="btn btn-primary">実行</button>
-            <button @click="execute_kansai" class="btn btn-success ms-2">関西弁で実行</button>
-            <button @click="execute_dazai" class="btn btn-dark ms-2">太宰治で実行</button>
-        </div>
-        
-        <h3>結果:</h3>
-        <div class="result-area p-3 border rounded" :class="{ 'alert alert-info': resultText && !resultText.startsWith('エラー:'), 'alert alert-danger': resultText.startsWith('エラー:') }">
-            <pre style="white-space: pre-wrap;">{{ resultText }}</pre>
-        </div>
+            <!-- 文書ビュー -->
+            <template v-else>
+                <div class="panels">
+                    <section class="panel panel-en">
+                        <div class="panel-label">英語</div>
+                        <pre>{{ current.en_text }}</pre>
+                    </section>
+                    <section class="panel panel-ja">
+                        <div class="panel-label">日本語</div>
+                        <pre>{{ current.ja_text }}</pre>
+                    </section>
+                </div>
+
+                <section class="word-area">
+                    <div class="panel-label">単語ピック</div>
+
+                    <!-- 通常モード: 単語チップ一覧 -->
+                    <template v-if="!quizMode">
+                        <div class="word-chips">
+                            <span v-if="!current.words || current.words.length === 0" class="text-muted">
+                                「単語帳を作成」を押すと、この文章の重要単語を抽出します。
+                            </span>
+                            <button v-for="w in current.words" :key="w.word" class="word-chip"
+                                    @click="toggleWord(w.word)" :title="w.meaning">
+                                {{ w.word }}<span v-if="revealed[w.word]"> — {{ w.meaning }}</span>
+                            </button>
+                        </div>
+                        <div v-if="error" class="alert alert-danger mt-2 mb-0 py-1">{{ error }}</div>
+                        <div class="word-buttons">
+                            <button class="action-btn" @click="startQuiz"
+                                    :disabled="!current.words || current.words.length === 0">単語クイズ</button>
+                            <button class="action-btn" @click="createWordbook" :disabled="isExtracting">
+                                {{ isExtracting ? '作成中...' : '単語帳を作成' }}
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- クイズモード -->
+                    <div v-else class="quiz-box">
+                        <template v-if="!quizFinished">
+                            <div class="text-muted">{{ quizIndex + 1 }} / {{ quizWords.length }}</div>
+                            <div class="quiz-word">{{ quizWords[quizIndex].word }}</div>
+                            <button v-if="!quizRevealed" class="btn btn-outline-primary" @click="quizRevealed = true">意味を表示</button>
+                            <template v-else>
+                                <div class="quiz-meaning">{{ quizWords[quizIndex].meaning }}</div>
+                                <div class="d-flex justify-content-center gap-3 mt-2">
+                                    <button class="btn btn-outline-danger" @click="answerQuiz(false)">← 分からなかった</button>
+                                    <button class="btn btn-outline-success" @click="answerQuiz(true)">分かった →</button>
+                                </div>
+                            </template>
+                        </template>
+                        <template v-else>
+                            <div class="quiz-word">結果</div>
+                            <div class="quiz-meaning">
+                                分かった: {{ knownCount }} / {{ quizWords.length }}<br>
+                                分からなかった: {{ quizWords.length - knownCount }}
+                            </div>
+                            <div class="d-flex justify-content-center gap-3 mt-2">
+                                <button class="btn btn-outline-primary" @click="startQuiz">もう一度</button>
+                                <button class="btn btn-outline-secondary" @click="quizMode = false">閉じる</button>
+                            </div>
+                        </template>
+                    </div>
+                </section>
+            </template>
+        </main>
     </div>
 
     <script>
@@ -37,44 +177,120 @@
         createApp({
             data() {
                 return {
+                    documents: [],
+                    current: null,
                     inputText: '',
-                    resultText: 'ここに結果が表示されます。'
+                    isTranslating: false,
+                    isExtracting: false,
+                    error: '',
+                    revealed: {},
+                    quizMode: false,
+                    quizWords: [],
+                    quizIndex: 0,
+                    quizRevealed: false,
+                    quizFinished: false,
+                    knownCount: 0
                 };
             },
+            async mounted() {
+                await this.fetchDocuments();
+            },
             methods: {
-                async sendRequest(context = null) {
-                    this.resultText = '処理中...';
+                async fetchDocuments() {
                     try {
-                        const payload = { text: this.inputText };
-                        if (context) {
-                            payload.context = context;
-                        }
-
-                        const response = await fetch('/send_api', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(payload)
-                        });
-                        const data = await response.json();
-                        if (response.ok) {
-                            this.resultText = data.processed_text;
-                        } else {
-                            this.resultText = `エラー: ${data.error || '不明なエラーが発生しました。'}`;
-                        }
-                    } catch (error) {
-                        this.resultText = `エラー: ${error.message}`;
+                        const res = await fetch('/api/documents');
+                        this.documents = await res.json();
+                    } catch (e) {
+                        this.error = '文章一覧の取得に失敗しました。';
                     }
                 },
-                execute() {
-                    this.sendRequest();
+                newDocument() {
+                    this.current = null;
+                    this.inputText = '';
+                    this.error = '';
+                    this.quizMode = false;
                 },
-                execute_kansai() {
-                    this.sendRequest("あなたは親切な関西人です。ユーザーからの入力に対して、必ず関西弁で、親しみやすく、そして140字以内で回答してください。");
+                async deleteDocument(id) {
+                    if (!confirm('この文章を削除しますか？')) return;
+                    try {
+                        const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error();
+                        if (this.current && this.current.id === id) this.current = null;
+                        await this.fetchDocuments();
+                    } catch (e) {
+                        this.error = '削除に失敗しました。';
+                    }
                 },
-                execute_dazai() {
-                    this.sendRequest("あなたは太宰治です。太宰治特有の、自虐的で繊細、どこか陰鬱で、しかし詩的な近代文学調の言い回しで、140字以内で回答してください。");
+                async selectDocument(id) {
+                    this.error = '';
+                    this.quizMode = false;
+                    this.revealed = {};
+                    try {
+                        const res = await fetch(`/api/documents/${id}`);
+                        if (!res.ok) throw new Error();
+                        this.current = await res.json();
+                    } catch (e) {
+                        this.error = '文章の読み込みに失敗しました。';
+                    }
+                },
+                async translate() {
+                    if (!this.inputText.trim()) {
+                        this.error = '英文を入力してください。';
+                        return;
+                    }
+                    this.isTranslating = true;
+                    this.error = '';
+                    try {
+                        const res = await fetch('/api/documents', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: this.inputText })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        this.current = data;
+                        this.revealed = {};
+                        await this.fetchDocuments();
+                    } catch (e) {
+                        this.error = e.message || '翻訳に失敗しました。';
+                    } finally {
+                        this.isTranslating = false;
+                    }
+                },
+                async createWordbook() {
+                    this.isExtracting = true;
+                    this.error = '';
+                    try {
+                        const res = await fetch(`/api/documents/${this.current.id}/words`, { method: 'POST' });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error);
+                        this.current.words = data;
+                        this.revealed = {};
+                    } catch (e) {
+                        this.error = e.message || '単語帳の作成に失敗しました。';
+                    } finally {
+                        this.isExtracting = false;
+                    }
+                },
+                toggleWord(word) {
+                    this.revealed[word] = !this.revealed[word];
+                },
+                startQuiz() {
+                    this.quizWords = [...this.current.words].sort(() => Math.random() - 0.5);
+                    this.quizIndex = 0;
+                    this.quizRevealed = false;
+                    this.quizFinished = false;
+                    this.knownCount = 0;
+                    this.quizMode = true;
+                },
+                answerQuiz(known) {
+                    if (known) this.knownCount++;
+                    if (this.quizIndex + 1 >= this.quizWords.length) {
+                        this.quizFinished = true;
+                    } else {
+                        this.quizIndex++;
+                        this.quizRevealed = false;
+                    }
                 }
             }
         }).mount('#app');
