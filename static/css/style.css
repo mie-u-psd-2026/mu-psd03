@@ -23,7 +23,20 @@ html, body { height: 100%; margin: 0; }
 .doc-item.active { background: #fff; font-weight: bold; }
 
 /* メイン領域 */
-.main { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 12px; min-width: 0; }
+.main { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 12px; min-width: 0; position: relative; }
+
+/* ハンバーガーメニュー(設定) */
+.menu-wrap { position: absolute; top: 16px; right: 20px; z-index: 20; }
+.menu-btn {
+    border: 1px solid #ccc; background: #fff; border-radius: 6px;
+    font-size: 1.1rem; padding: 2px 10px; cursor: pointer;
+}
+.menu-btn:hover { background: #f5f5f5; }
+.menu-panel {
+    position: absolute; right: 0; top: 38px; width: 240px;
+    background: #fff; border: 1px solid #ccc; border-radius: 8px;
+    padding: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
 .panels { flex: 1; display: flex; gap: 12px; min-height: 0; }
 .panel {
     flex: 1; border-radius: 4px; padding: 12px;

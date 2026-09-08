@@ -1,6 +1,8 @@
-# Flaskのルーティング定義。処理の実体は llm_service.py / document_store.py に分離している。
+# Flaskのルーティング定義。処理の実体は llm_service.py / document_store.py /
+# file_reader.py に分離している。
 from flask import Flask, request, jsonify, send_from_directory
 
+import file_reader
 import llm_service
 from document_store import (
     load_documents,
@@ -44,6 +46,16 @@ def get_document(doc_id):
     return jsonify(doc)
 
 
+def _translate_and_save(en_text):
+    # 翻訳→文書レコード作成→保存の共通処理(テキスト入力とファイル入力の両方で使う)
+    ja_text = llm_service.call_llm(llm_service.TRANSLATE_PROMPT, en_text)
+    doc = create_document_record(en_text, ja_text)
+    docs = load_documents()
+    docs.insert(0, doc)
+    save_documents(docs)
+    return doc
+
+
 @app.route('/api/documents', methods=['POST'])
 def create_document():
     data = request.get_json()
@@ -51,19 +63,41 @@ def create_document():
     if not data or 'text' not in data or not data['text'].strip():
         return jsonify({"error": "英文を入力してください。"}), 400
 
-    en_text = data['text'].strip()
-
     try:
-        ja_text = llm_service.call_llm(llm_service.TRANSLATE_PROMPT, en_text)
+        doc = _translate_and_save(data['text'].strip())
     except Exception as e:
         app.logger.error(f"Translation failed: {e}")
         return jsonify({"error": "翻訳中にエラーが発生しました。"}), 500
 
-    doc = create_document_record(en_text, ja_text)
+    return jsonify(doc), 201
 
-    docs = load_documents()
-    docs.insert(0, doc)
-    save_documents(docs)
+
+@app.route('/api/documents/upload', methods=['POST'])
+def upload_document():
+    if 'file' not in request.files or request.files['file'].filename == '':
+        return jsonify({"error": "ファイルを選択してください。"}), 400
+
+    uploaded = request.files['file']
+
+    try:
+        en_text = file_reader.extract_text_from_file(uploaded.filename, uploaded.read())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"File extraction failed: {e}")
+        return jsonify({"error": "ファイルの読み取りに失敗しました。"}), 500
+
+    if not en_text or not en_text.strip():
+        return jsonify({"error": "ファイルからテキストを抽出できませんでした。"}), 400
+
+    try:
+        doc = _translate_and_save(en_text.strip())
+    except Exception as e:
+        app.logger.error(f"Translation failed: {e}")
+        return jsonify({"error": "翻訳中にエラーが発生しました。"}), 500
+
     return jsonify(doc), 201
 
 
@@ -85,8 +119,12 @@ def create_wordbook(doc_id):
     if doc is None:
         return jsonify({"error": "指定された文章が見つかりません。"}), 404
 
+    # 難易度設定(ハンバーガーメニュー)はJSONボディの level で受け取る
+    data = request.get_json(silent=True) or {}
+    level = data.get("level", "intermediate")
+
     try:
-        raw = llm_service.call_llm(llm_service.WORD_PICK_PROMPT, doc["en_text"])
+        raw = llm_service.call_llm(llm_service.word_pick_prompt(level), doc["en_text"])
         words = llm_service.parse_json_block(raw)
         if not isinstance(words, list):
             raise ValueError("words is not a list")

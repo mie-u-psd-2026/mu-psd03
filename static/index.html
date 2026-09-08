@@ -26,6 +26,19 @@
         </aside>
 
         <main class="main">
+            <!-- 右上: ハンバーガーメニュー(設定) -->
+            <div class="menu-wrap">
+                <button class="menu-btn" title="設定" @click="menuOpen = !menuOpen">☰</button>
+                <div v-if="menuOpen" class="menu-panel">
+                    <label class="form-label mb-1">単語抽出の難易度</label>
+                    <select v-model="settings.level" class="form-select form-select-sm" @change="saveSettings">
+                        <option value="beginner">初級（幅広く抽出）</option>
+                        <option value="intermediate">中級（高校レベル以上）</option>
+                        <option value="advanced">上級（難単語のみ）</option>
+                    </select>
+                </div>
+            </div>
+
             <!-- 入力ビュー(文章未選択時) -->
             <div v-if="!current" class="input-view">
                 <h5>英文を入力してください</h5>
@@ -33,6 +46,14 @@
                 <div>
                     <button class="btn btn-primary" @click="translate" :disabled="isTranslating">
                         {{ isTranslating ? '翻訳中...' : '翻訳する' }}
+                    </button>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted">またはファイルから:</span>
+                    <input type="file" ref="fileInput" class="form-control form-control-sm" style="max-width: 300px;"
+                           accept=".pdf,.png,.jpg,.jpeg">
+                    <button class="btn btn-outline-primary btn-sm" @click="uploadFile" :disabled="isTranslating">
+                        {{ isTranslating ? '処理中...' : 'PDF・画像から翻訳' }}
                     </button>
                 </div>
                 <div v-if="error" class="alert alert-danger mb-0">{{ error }}</div>

@@ -1,4 +1,5 @@
 # LLM(Gemini / Ollama)との通信を担当するモジュール。バックエンド担当が管理する。
+import base64
 import json
 import logging
 import os
@@ -49,12 +50,29 @@ TRANSLATE_PROMPT = (
     "自然な日本語に翻訳してください。翻訳文のみを出力し、前置きや説明は不要です。"
 )
 
-WORD_PICK_PROMPT = (
-    "あなたは英語教師です。与えられた英文から、日本人の英語学習者が覚えるべき"
-    "重要単語を8〜12個抽出してください。基礎的すぎる単語(a, the, is など)は除いてください。"
-    "以下のJSON配列の形式のみで出力してください。説明やコードブロックは不要です。\n"
-    '[{"word": "英単語", "meaning": "日本語の意味"}]'
+# 単語抽出の難易度設定(ハンバーガーメニューの設定と対応)
+WORD_LEVEL_GUIDES = {
+    "beginner": "中学レベルの基礎単語だけを除き、それ以外は幅広く",
+    "intermediate": "高校レベル以上の単語を中心に",
+    "advanced": "大学・専門レベルの難しい単語に絞って",
+}
+
+OCR_PROMPT = (
+    "この画像に含まれる英文をすべて書き出してください。"
+    "文章のみを出力し、説明や前置きは不要です。"
 )
+
+
+def word_pick_prompt(level="intermediate"):
+    guide = WORD_LEVEL_GUIDES.get(level, WORD_LEVEL_GUIDES["intermediate"])
+    return (
+        "あなたは英語教師です。与えられた英文から、日本人の英語学習者が覚えるべき"
+        f"重要単語を抽出してください。{guide}選んでください。"
+        "個数の上限はありません。該当する単語はすべて抽出してください。"
+        "a, the, is のような基礎的すぎる単語は除いてください。"
+        "以下のJSON配列の形式のみで出力してください。説明やコードブロックは不要です。\n"
+        '[{"word": "英単語", "meaning": "日本語の意味"}]'
+    )
 
 
 def call_llm(system_prompt, user_text):
@@ -71,6 +89,31 @@ def call_llm(system_prompt, user_text):
             return completion.choices[0].message.content
         except Exception as e:
             logger.warning(f"LLM call failed on {model}: {e}")
+            last_error = e
+    raise last_error
+
+
+def ocr_image(image_bytes, mime_type="image/png"):
+    # 画像から英文を読み取る(Gemini のマルチモーダル入力を使用)
+    if not GEMINI_API_KEY:
+        raise RuntimeError("画像の読み取り(OCR)にはGemini APIキー(.env)が必要です。")
+
+    b64 = base64.b64encode(image_bytes).decode()
+    content = [
+        {"type": "text", "text": OCR_PROMPT},
+        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+    ]
+
+    last_error = None
+    for model in LLM_MODELS:
+        try:
+            completion = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": content}],
+            )
+            return completion.choices[0].message.content
+        except Exception as e:
+            logger.warning(f"OCR call failed on {model}: {e}")
             last_error = e
     raise last_error
 

@@ -16,13 +16,51 @@ createApp({
             quizIndex: 0,
             quizRevealed: false,
             quizFinished: false,
-            knownCount: 0
+            knownCount: 0,
+            menuOpen: false,
+            settings: { level: 'intermediate' }
         };
     },
     async mounted() {
+        this.loadSettings();
         await this.fetchDocuments();
     },
     methods: {
+        loadSettings() {
+            // 設定はブラウザのlocalStorageに保存する(端末ごと)
+            try {
+                const saved = localStorage.getItem('appSettings');
+                if (saved) this.settings = { ...this.settings, ...JSON.parse(saved) };
+            } catch (e) { /* 読めない環境では既定値のまま */ }
+        },
+        saveSettings() {
+            try {
+                localStorage.setItem('appSettings', JSON.stringify(this.settings));
+            } catch (e) { /* 保存できない環境では無視 */ }
+        },
+        async uploadFile() {
+            const file = this.$refs.fileInput.files[0];
+            if (!file) {
+                this.error = 'ファイルを選択してください。';
+                return;
+            }
+            this.isTranslating = true;
+            this.error = '';
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch('/api/documents/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                this.current = data;
+                this.revealed = {};
+                await this.fetchDocuments();
+            } catch (e) {
+                this.error = e.message || 'ファイルの読み込みに失敗しました。';
+            } finally {
+                this.isTranslating = false;
+            }
+        },
         async fetchDocuments() {
             try {
                 const res = await fetch('/api/documents');
@@ -88,7 +126,11 @@ createApp({
             this.isExtracting = true;
             this.error = '';
             try {
-                const res = await fetch(`/api/documents/${this.current.id}/words`, { method: 'POST' });
+                const res = await fetch(`/api/documents/${this.current.id}/words`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level: this.settings.level })
+                });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
                 this.current.words = data;
@@ -103,7 +145,8 @@ createApp({
             this.revealed[word] = !this.revealed[word];
         },
         startQuiz() {
-            this.quizWords = [...this.current.words].sort(() => Math.random() - 0.5);
+            // 単語帳は無制限だが、クイズは1回ランダム10問固定
+            this.quizWords = [...this.current.words].sort(() => Math.random() - 0.5).slice(0, 10);
             this.quizIndex = 0;
             this.quizRevealed = false;
             this.quizFinished = false;
