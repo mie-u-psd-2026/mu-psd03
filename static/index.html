@@ -4,121 +4,185 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>英語学習アプリ</title>
-    <!-- Vue.jsをCDNから読み込み -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- BootStrapをCDNから読み込み -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
-    <!-- アプリのスタイル -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260909-noresize1">
 </head>
 <body>
+    <div id="app" class="app-root" :class="{ 'sidebar-open': sidebarOpen }">
+        <button class="sidebar-backdrop" type="button" aria-label="メニューを閉じる" @click="sidebarOpen = false"></button>
 
-    <div id="app" class="app-root">
-        <!-- 左: 文章一覧 (ChatGPT風) -->
         <aside class="sidebar">
-            <button class="btn btn-light w-100 mb-2 border" @click="newDocument">＋ 新しい文章</button>
-            <div v-for="doc in documents" :key="doc.id"
-                 class="doc-item" :class="{ active: current && current.id === doc.id }"
-                 @click="selectDocument(doc.id)">
-                <span class="doc-title">{{ doc.title }}</span>
-                <button class="doc-delete" title="削除" @click.stop="deleteDocument(doc.id)">✕</button>
+            <div class="sidebar-brand">
+                <div class="brand-mark">R</div>
+                <div>
+                    <div class="brand-name">ReadMate</div>
+                    <div class="brand-sub">English reader</div>
+                </div>
+            </div>
+
+            <button class="new-doc-btn" type="button" @click="newDocument">
+                <i data-lucide="plus"></i>
+                <span>新しい文章</span>
+            </button>
+
+            <div class="sidebar-section">History</div>
+            <div class="doc-list">
+                <div v-for="doc in documents" :key="doc.id"
+                     class="doc-item" :class="{ active: current && current.id === doc.id }"
+                     @click="selectDocument(doc.id)">
+                    <span class="doc-title">{{ doc.title }}</span>
+                    <button class="doc-delete" type="button" title="削除" @click.stop="deleteDocument(doc.id)">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+                <div v-if="documents.length === 0" class="empty-history">No documents</div>
             </div>
         </aside>
 
         <main class="main">
-            <!-- 右上: ハンバーガーメニュー(設定) -->
-            <div class="menu-wrap">
-                <button class="menu-btn" title="設定" @click="menuOpen = !menuOpen">☰</button>
-                <div v-if="menuOpen" class="menu-panel">
-                    <label class="form-label mb-1">単語抽出の難易度</label>
-                    <select v-model="settings.level" class="form-select form-select-sm" @change="saveSettings">
-                        <option value="beginner">初級（幅広く抽出）</option>
-                        <option value="intermediate">中級（高校レベル以上）</option>
-                        <option value="advanced">上級（難単語のみ）</option>
-                    </select>
-                </div>
-            </div>
+            <header class="topbar">
+                <button class="icon-button sidebar-toggle" type="button" title="メニュー" @click="sidebarOpen = true">
+                    <i data-lucide="menu"></i>
+                </button>
 
-            <!-- 入力ビュー(文章未選択時) -->
+                <div class="page-title">
+                    <span class="eyebrow">AI English Reader</span>
+                    <h1>{{ current ? current.title : '英文を読める教材に変える' }}</h1>
+                </div>
+
+                <div class="menu-wrap">
+                    <button class="icon-button" type="button" title="設定" @click="menuOpen = !menuOpen">
+                        <i data-lucide="sliders-horizontal"></i>
+                    </button>
+                    <div v-if="menuOpen" class="menu-panel">
+                        <label class="setting-label">単語抽出の難易度</label>
+                        <select v-model="settings.level" class="form-select form-select-sm" @change="saveSettings">
+                            <option value="beginner">初級: 広めに抽出</option>
+                            <option value="intermediate">中級: 高校レベル以上</option>
+                            <option value="advanced">上級: 難単語のみ</option>
+                        </select>
+                    </div>
+                </div>
+            </header>
+
             <div v-if="!current" class="input-view">
-                <h5>英文を入力してください</h5>
-                <textarea v-model="inputText" class="form-control" placeholder="ここに英語の文章を貼り付け..."></textarea>
-                <div>
-                    <button class="btn btn-primary" @click="translate" :disabled="isTranslating">
-                        {{ isTranslating ? '翻訳中...' : '翻訳する' }}
+                <div class="input-heading">
+                    <span class="eyebrow">Start</span>
+                    <h2>英文入力</h2>
+                </div>
+
+                <textarea v-model="inputText" class="form-control text-input" placeholder="ここに英語の文章を貼り付け..."></textarea>
+
+                <div class="input-actions">
+                    <button class="button button-primary" type="button" @click="translate" :disabled="isTranslating">
+                        <i data-lucide="languages"></i>
+                        <span>{{ isTranslating ? '翻訳中...' : '翻訳する' }}</span>
+                    </button>
+
+                    <label class="file-picker">
+                        <input type="file" ref="fileInput" accept=".pdf,.png,.jpg,.jpeg">
+                        <span>PDF / 画像</span>
+                    </label>
+
+                    <button class="button button-secondary" type="button" @click="uploadFile" :disabled="isTranslating">
+                        <i data-lucide="upload"></i>
+                        <span>{{ isTranslating ? '処理中...' : 'ファイルから翻訳' }}</span>
                     </button>
                 </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="text-muted">またはファイルから:</span>
-                    <input type="file" ref="fileInput" class="form-control form-control-sm" style="max-width: 300px;"
-                           accept=".pdf,.png,.jpg,.jpeg">
-                    <button class="btn btn-outline-primary btn-sm" @click="uploadFile" :disabled="isTranslating">
-                        {{ isTranslating ? '処理中...' : 'PDF・画像から翻訳' }}
-                    </button>
-                </div>
-                <div v-if="error" class="alert alert-danger mb-0">{{ error }}</div>
+
+                <div v-if="error" class="alert-message">{{ error }}</div>
             </div>
 
-            <!-- 文書ビュー -->
             <template v-else>
-                <div class="panels">
-                    <section class="panel panel-en">
-                        <div class="panel-label">英語</div>
+                <div class="reader-layout">
+                    <section class="reader-pane">
+                        <div class="pane-header">
+                            <span>English</span>
+                        </div>
                         <pre>{{ current.en_text }}</pre>
                     </section>
-                    <section class="panel panel-ja">
-                        <div class="panel-label">日本語</div>
+
+                    <section class="reader-pane reader-pane-ja">
+                        <div class="pane-header">
+                            <span>Japanese</span>
+                        </div>
                         <pre>{{ current.ja_text }}</pre>
                     </section>
                 </div>
 
                 <section class="word-area">
-                    <div class="panel-label">単語ピック</div>
+                    <div class="word-header">
+                        <div>
+                            <span class="eyebrow">Vocabulary</span>
+                            <h2>単語ピック</h2>
+                        </div>
+                        <div class="word-actions">
+                            <button class="button button-secondary" type="button" @click="startQuiz"
+                                    :disabled="!current.words || current.words.length === 0">
+                                <i data-lucide="book-open-check"></i>
+                                <span>単語クイズ</span>
+                            </button>
+                            <button class="button button-primary" type="button" @click="createWordbook" :disabled="isExtracting">
+                                <i data-lucide="list-plus"></i>
+                                <span>{{ isExtracting ? '作成中...' : '単語帳を作成' }}</span>
+                            </button>
+                        </div>
+                    </div>
 
-                    <!-- 通常モード: 単語チップ一覧 -->
                     <template v-if="!quizMode">
                         <div class="word-chips">
-                            <span v-if="!current.words || current.words.length === 0" class="text-muted">
-                                「単語帳を作成」を押すと、この文章の重要単語を抽出します。
+                            <span v-if="!current.words || current.words.length === 0" class="empty-state">
+                                単語帳を作成すると、この文章の重要単語を抽出します。
                             </span>
                             <button v-for="w in current.words" :key="w.word" class="word-chip"
-                                    @click="toggleWord(w.word)" :title="w.meaning">
-                                {{ w.word }}<span v-if="revealed[w.word]"> — {{ w.meaning }}</span>
+                                    type="button" @click="toggleWord(w.word)" :title="w.meaning">
+                                <span>{{ w.word }}</span>
+                                <span v-if="revealed[w.word]" class="word-meaning">{{ w.meaning }}</span>
                             </button>
                         </div>
-                        <div v-if="error" class="alert alert-danger mt-2 mb-0 py-1">{{ error }}</div>
-                        <div class="word-buttons">
-                            <button class="action-btn" @click="startQuiz"
-                                    :disabled="!current.words || current.words.length === 0">単語クイズ</button>
-                            <button class="action-btn" @click="createWordbook" :disabled="isExtracting">
-                                {{ isExtracting ? '作成中...' : '単語帳を作成' }}
-                            </button>
-                        </div>
+                        <div v-if="error" class="alert-message compact">{{ error }}</div>
                     </template>
 
-                    <!-- クイズモード -->
                     <div v-else class="quiz-box">
                         <template v-if="!quizFinished">
-                            <div class="text-muted">{{ quizIndex + 1 }} / {{ quizWords.length }}</div>
+                            <div class="quiz-count">{{ quizIndex + 1 }} / {{ quizWords.length }}</div>
                             <div class="quiz-word">{{ quizWords[quizIndex].word }}</div>
-                            <button v-if="!quizRevealed" class="btn btn-outline-primary" @click="quizRevealed = true">意味を表示</button>
+                            <button v-if="!quizRevealed" class="button button-primary" type="button" @click="quizRevealed = true">
+                                <i data-lucide="eye"></i>
+                                <span>意味を表示</span>
+                            </button>
                             <template v-else>
                                 <div class="quiz-meaning">{{ quizWords[quizIndex].meaning }}</div>
-                                <div class="d-flex justify-content-center gap-3 mt-2">
-                                    <button class="btn btn-outline-danger" @click="answerQuiz(false)">← 分からなかった</button>
-                                    <button class="btn btn-outline-success" @click="answerQuiz(true)">分かった →</button>
+                                <div class="quiz-actions">
+                                    <button class="button button-secondary" type="button" @click="answerQuiz(false)">
+                                        <i data-lucide="arrow-left"></i>
+                                        <span>分からなかった</span>
+                                    </button>
+                                    <button class="button button-primary" type="button" @click="answerQuiz(true)">
+                                        <span>分かった</span>
+                                        <i data-lucide="arrow-right"></i>
+                                    </button>
                                 </div>
                             </template>
                         </template>
+
                         <template v-else>
                             <div class="quiz-word">結果</div>
                             <div class="quiz-meaning">
                                 分かった: {{ knownCount }} / {{ quizWords.length }}<br>
                                 分からなかった: {{ quizWords.length - knownCount }}
                             </div>
-                            <div class="d-flex justify-content-center gap-3 mt-2">
-                                <button class="btn btn-outline-primary" @click="startQuiz">もう一度</button>
-                                <button class="btn btn-outline-secondary" @click="quizMode = false">閉じる</button>
+                            <div class="quiz-actions">
+                                <button class="button button-secondary" type="button" @click="startQuiz">
+                                    <i data-lucide="rotate-ccw"></i>
+                                    <span>もう一度</span>
+                                </button>
+                                <button class="button button-secondary" type="button" @click="quizMode = false">
+                                    <i data-lucide="x"></i>
+                                    <span>閉じる</span>
+                                </button>
                             </div>
                         </template>
                     </div>
@@ -127,7 +191,6 @@
         </main>
     </div>
 
-    <!-- アプリ本体のスクリプト(Vueより後に読み込む) -->
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=20260909-noresize1"></script>
 </body>
 </html>
