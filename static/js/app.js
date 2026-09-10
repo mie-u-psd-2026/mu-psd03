@@ -19,6 +19,8 @@ createApp({
             knownCount: 0,
             sidebarOpen: false,
             menuOpen: false,
+            focusPane: 'both',   // 'both' | 'en' | 'ja' — 英日どちらかを最大化する
+            wordCollapsed: false,
             settings: { level: 'intermediate' }
         };
     },
@@ -150,6 +152,9 @@ createApp({
         },
         toggleWord(word) {
             this.revealed[word] = !this.revealed[word];
+        },
+        toggleFocus(pane) {
+            this.focusPane = this.focusPane === pane ? 'both' : pane;
         },
         startQuiz() {
             // 単語帳は無制限だが、クイズは1回ランダム10問固定
