@@ -7,10 +7,12 @@
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="/static/css/style.css?v=20260910-panes1">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260910-delete1">
 </head>
 <body>
-    <div id="app" class="app-root" :class="{ 'sidebar-open': sidebarOpen }">
+    <div id="app" class="app-root" :class="{ 'sidebar-open': sidebarOpen }"
+         @dragover="handleAppDragOver($event)"
+         @drop="handleAppDrop($event)">
         <button class="sidebar-backdrop" type="button" aria-label="メニューを閉じる" @click="sidebarOpen = false"></button>
 
         <aside class="sidebar">
@@ -63,6 +65,10 @@
                             <option value="intermediate">中級: 高校レベル以上</option>
                             <option value="advanced">上級: 難単語のみ</option>
                         </select>
+                        <label class="setting-check">
+                            <input type="checkbox" v-model="settings.autoArchiveKnown" @change="saveSettings">
+                            <span>正解した単語を次回から出さない</span>
+                        </label>
                     </div>
                 </div>
             </header>
@@ -122,7 +128,10 @@
                     </section>
                 </div>
 
-                <section class="word-area" :class="{ collapsed: wordCollapsed }">
+                <section class="word-area" :class="{ collapsed: wordCollapsed, 'delete-ready': deleteDropReady }">
+                    <div v-if="draggingWord && deleteDropReady" class="delete-drop-mark" aria-hidden="true">
+                        <i data-lucide="trash-2"></i>
+                    </div>
                     <div class="word-header">
                         <div class="word-heading">
                             <button class="pane-toggle" type="button"
@@ -132,12 +141,12 @@
                             </button>
                             <div>
                                 <span class="eyebrow">Vocabulary</span>
-                                <h2>単語ピック<span v-if="current.words && current.words.length"> ({{ current.words.length }})</span></h2>
+                                <h2>単語ピック<span v-if="currentWordCount"> ({{ activeWords.length }} / {{ currentWordCount }})</span></h2>
                             </div>
                         </div>
                         <div class="word-actions">
-                            <button class="button button-secondary" type="button" @click="startQuiz"
-                                    :disabled="!current.words || current.words.length === 0">
+                            <button class="button button-secondary" type="button" @click="startQuiz('active')"
+                                    :disabled="activeWords.length === 0">
                                 <i data-lucide="book-open-check"></i>
                                 <span>単語クイズ</span>
                             </button>
@@ -149,15 +158,75 @@
                     </div>
 
                     <template v-if="!quizMode && !wordCollapsed">
-                        <div class="word-chips">
-                            <span v-if="!current.words || current.words.length === 0" class="empty-state">
-                                単語帳を作成すると、この文章の重要単語を抽出します。
-                            </span>
-                            <button v-for="w in current.words" :key="w.word" class="word-chip"
-                                    type="button" @click="toggleWord(w.word)" :title="w.meaning">
-                                <span>{{ w.word }}</span>
-                                <span v-if="revealed[w.word]" class="word-meaning">{{ w.meaning }}</span>
-                            </button>
+                        <div class="word-board">
+                            <section class="word-zone"
+                                     :class="{ 'drop-target': dragOverZone === 'active' }"
+                                     @dragenter.prevent="dragOverWordZone('active', $event)"
+                                     @dragover.prevent="dragOverWordZone('active', $event)"
+                                     @dragleave="leaveWordZone('active', $event)"
+                                     @drop.prevent="dropWord('active', $event)">
+                                <div class="zone-header">
+                                    <span>出題する</span>
+                                    <strong>{{ activeWords.length }}</strong>
+                                </div>
+                                <div class="word-chips">
+                                    <span v-if="!current.words || current.words.length === 0" class="empty-state">
+                                        単語帳を作成すると、この文章の重要単語を抽出します。
+                                    </span>
+                                    <span v-else-if="activeWords.length === 0" class="empty-state">
+                                        出題する単語がありません。
+                                    </span>
+                                    <div v-for="w in activeWords" :key="w.word" class="word-chip"
+                                         draggable="true"
+                                         role="button"
+                                         tabindex="0"
+                                         :class="{ dragging: draggingWord && wordKey(draggingWord.word) === wordKey(w.word) }"
+                                         :title="w.meaning"
+                                         @click="toggleWord(w.word)"
+                                         @keydown.enter.prevent="toggleWord(w.word)"
+                                         @keydown.space.prevent="toggleWord(w.word)"
+                                         @dragstart="startWordDrag(w, 'active', $event)"
+                                         @drag="trackWordDrag($event)"
+                                         @dragend="endWordDrag($event)">
+                                        <span class="drag-handle" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
+                                        <span>{{ w.word }}</span>
+                                        <span v-if="revealed[w.word]" class="word-meaning">{{ w.meaning }}</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="word-zone word-zone-muted"
+                                     :class="{ 'drop-target': dragOverZone === 'archived' }"
+                                     @dragenter.prevent="dragOverWordZone('archived', $event)"
+                                     @dragover.prevent="dragOverWordZone('archived', $event)"
+                                     @dragleave="leaveWordZone('archived', $event)"
+                                     @drop.prevent="dropWord('archived', $event)">
+                                <div class="zone-header">
+                                    <span>出さない</span>
+                                    <strong>{{ archivedWords.length }}</strong>
+                                </div>
+                                <div class="word-chips">
+                                    <span v-if="archivedWords.length === 0" class="empty-state">
+                                        出さない単語はありません。
+                                    </span>
+                                    <div v-for="w in archivedWords" :key="w.word" class="word-chip muted"
+                                         draggable="true"
+                                         role="button"
+                                         tabindex="0"
+                                         :class="{ dragging: draggingWord && wordKey(draggingWord.word) === wordKey(w.word) }"
+                                         :title="w.meaning"
+                                         @click="toggleWord(w.word)"
+                                         @keydown.enter.prevent="toggleWord(w.word)"
+                                         @keydown.space.prevent="toggleWord(w.word)"
+                                         @dragstart="startWordDrag(w, 'archived', $event)"
+                                         @drag="trackWordDrag($event)"
+                                         @dragend="endWordDrag($event)">
+                                        <span class="drag-handle" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>
+                                        <span>{{ w.word }}</span>
+                                        <span v-if="revealed[w.word]" class="word-meaning">{{ w.meaning }}</span>
+                                    </div>
+                                </div>
+                            </section>
                         </div>
                         <div v-if="error" class="alert-message compact">{{ error }}</div>
                     </template>
@@ -189,10 +258,15 @@
                             <div class="quiz-word">結果</div>
                             <div class="quiz-meaning">
                                 分かった: {{ knownCount }}<br>
-                                分からなかった: {{ quizWords.length - knownCount }}
+                                分からなかった: {{ wrongCount }}
                             </div>
                             <div class="quiz-actions">
-                                <button class="button button-secondary" type="button" @click="startQuiz">
+                                <button class="button button-primary" type="button" @click="startQuiz('wrong')"
+                                        :disabled="wrongCount === 0">
+                                    <i data-lucide="repeat-2"></i>
+                                    <span>間違いだけ復習</span>
+                                </button>
+                                <button class="button button-secondary" type="button" @click="startQuiz('active')">
                                     <i data-lucide="rotate-ccw"></i>
                                     <span>もう一度</span>
                                 </button>
@@ -208,6 +282,6 @@
         </main>
     </div>
 
-    <script src="/static/js/app.js?v=20260910-panes1"></script>
+    <script src="/static/js/app.js?v=20260910-delete1"></script>
 </body>
 </html>
