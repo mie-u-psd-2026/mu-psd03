@@ -17,6 +17,7 @@ createApp({
             quizRevealed: false,
             quizFinished: false,
             knownCount: 0,
+            sidebarOpen: false,
             menuOpen: false,
             settings: { level: 'intermediate' }
         };
@@ -24,6 +25,10 @@ createApp({
     async mounted() {
         this.loadSettings();
         await this.fetchDocuments();
+        if (window.lucide) this.$nextTick(() => window.lucide.createIcons());
+    },
+    updated() {
+        if (window.lucide) this.$nextTick(() => window.lucide.createIcons());
     },
     methods: {
         loadSettings() {
@@ -74,6 +79,7 @@ createApp({
             this.inputText = '';
             this.error = '';
             this.quizMode = false;
+            this.sidebarOpen = false;
         },
         async deleteDocument(id) {
             if (!confirm('この文章を削除しますか？')) return;
@@ -90,6 +96,7 @@ createApp({
             this.error = '';
             this.quizMode = false;
             this.revealed = {};
+            this.sidebarOpen = false;
             try {
                 const res = await fetch(`/api/documents/${id}`);
                 if (!res.ok) throw new Error();
